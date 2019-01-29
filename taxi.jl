@@ -9,47 +9,34 @@ path = joinpath(datadep"taxi", file)
 
 @pyimport pandas as pd
 
-#-----------------------------------------------------------------------# Load (Date)
-@info "Benchmark 1: Loading data, parse date fields as Date"
-b1 = BenchmarkGroup()
-b1["JuliaDB"] = @benchmarkable loadtable(path)
-b1["Pandas"] = @benchmarkable pd.read_csv(path, parse_dates=["tpep_pickup_datetime", "tpep_dropoff_datetime"])
-tune!(b1)
-b1res = run(b1, verbose=true)
+#-----------------------------------------------------------------------# Benchmarks
+b = BenchmarkGroup()
 
+b["load date (JuliaDB)"] = @benchmarkable loadtable(path)
+b["load date (Pandas)"] = @benchmarkable pd.read_csv(path, parse_dates=["tpep_pickup_datetime", "tpep_dropoff_datetime"])
 
-#-----------------------------------------------------------------------# Load (String)
-@info "Benchmark 2: Loading data, parse date fields as String"
-b2 =  BenchmarkGroup()
-b2["JuliaDB"] = @benchmarkable loadtable($path, colparsers=Dict(2=>String, 3=>String))
-b2["Pandas"] = @benchmarkable pd.read_csv($path)
-tune!(b2)
-b2res = run(b2, verbose=true)
+b["load string (JuliaDB)"] = @benchmarkable loadtable($path, colparsers=Dict(2=>String, 3=>String))
+b["load string (Pandas)"] = @benchmarkable pd.read_csv($path)
 
-
-#-----------------------------------------------------------------------# Groupby
-# groupby 1: Average fare_amount grouped by passenger_count
-# groupby 2: Average fare_amount grouped by passenger_count and day of week
-@info "Benchmark 3: groupby/groupreduce operations"
-b3 = BenchmarkGroup()
-
-@info "Loading datasets"
+@info "Loading datasets for groupby benchmarks"
 t = loadtable(path)
 t2 = pd.read_csv(path, parse_dates=["tpep_pickup_datetime", "tpep_dropoff_datetime"])
 
-b3["JuliaDB groupby 1"] = @benchmarkable groupby(mean, $t, :passenger_count; select=:fare_amount)
-b3["JuliaDB groupreduce 1"] = @benchmarkable groupreduce(Mean(), $t, :passenger_count; select=:fare_amount)
-b3["JuliaDB groupby 2"] = @benchmarkable begin
+b["groupby 1 (JuliaDB)"] = @benchmarkable groupby(mean, $t, :passenger_count; select=:fare_amount)
+b["groupreduce 1 (JuliaDB)"] = @benchmarkable groupreduce(Mean(), $t, :passenger_count; select=:fare_amount)
+b["groupby 1 (Pandas)"] = @benchmarkable $t2[:groupby]("passenger_count")["fare_amount"][:mean]()
+
+
+b["groupby 2 (JuliaDB)"] = @benchmarkable begin
     groupby(mean, $t, (:tpep_pickup_datetime=>dayofweek, :passenger_count); select=:fare_amount)
 end
-b3["JuliaDB groupreduce 2"] = @benchmarkable begin
+b["groupreduce 2 (JuliaDB)"] = @benchmarkable begin
     groupreduce(Mean(), $t, (:tpep_pickup_datetime=>dayofweek, :passenger_count); select=:fare_amount)
 end
-
-b3["Pandas groupby 1"] = @benchmarkable $t2[:groupby]("passenger_count")["fare_amount"][:mean]()
-b3["Pandas groupby 2"] = @benchmarkable begin
+b["groupby 2 (Pandas)"] = @benchmarkable begin
     $t2[:groupby]([$t2["tpep_pickup_datetime"][:dt][:dayofweek],"passenger_count"])["fare_amount"][:count]()
 end
 
-tune!(b3)
-b3res = run(b3, verbose=true)
+tune!(b)
+
+results = run(b, verbose=true)

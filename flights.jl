@@ -44,6 +44,11 @@ b["map namedtuple (DataValue"] = @benchmarkable map(f, $t2)
 b["groupby (Missing)"] = @benchmarkable groupby(mean ∘ skipmissing, $t, :Dest, select = :ArrDelay)
 b["groupby (DataValue)"] = @benchmarkable groupby(mean ∘ dropna, $t2, :Dest, select = :ArrDelay)
 
-tune!(b)
+o1 = FTSeries(Mean(); filter = !ismissing)
+o2 = FTSeries(DataValue, Mean(); filter = !isna, transform=get)
+b["groupreduce (Missing)"] = @benchmarkable groupreduce($(copy(o1)), $t, :Dest, select = :ArrDelay)
+b["groupreduce (DataValue"] = @benchmarkable groupreduce($(copy(o2)), $t2, :Dest, select = :ArrDelay)
 
-bres = run(b, verbose=true)
+tune!(b, verbose=true)
+
+results = run(b, verbose=true)
