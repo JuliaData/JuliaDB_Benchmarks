@@ -1,5 +1,5 @@
 #-----------------------------------------------------------------------# Setup
-using DataDeps, JuliaDB, BenchmarkTools, Statistics, DataValues, OnlineStats
+include("utils.jl")
 
 file = "hflights.csv"
 url = "https://raw.githubusercontent.com/piever/JuliaDBTutorial/master/$file"
@@ -10,45 +10,61 @@ t = loadtable(path)
 
 #-----------------------------------------------------------------------# benchmarks
 b = BenchmarkGroup()
+b["Missing"] = BenchmarkGroup()
+b["DataValue"] = BenchmarkGroup()
 
-b["loadtable"] = @benchmarkable loadtable(path)
+d = OrderedDict()
 
+#-----------------------------------------------------------------------# load tables
 t = loadtable(path)
 t2 = convertmissing(t, DataValue)
 
-b["convertmissing (Missing->DataValue)"] = @benchmarkable convertmissing($t, DataValue)
-b["convertmissing (DataValue->Missing)"] = @benchmarkable convertmissing($t2, Missing)
+#-----------------------------------------------------------------------# convertmissing
+d["convertmissing"] = "convert missing values to the other representation"
+b["Missing"]["convertmissing"] = @benchmarkable convertmissing($t, DataValue)
+b["DataValue"]["convertmissing"] = @benchmarkable convertmissing($t2, Missing)
 
-b["dropmissing (Missing)"] = @benchmarkable dropmissing($t)
-b["dropmissing (DataValue)"] = @benchmarkable dropmissing($t2)
+#-----------------------------------------------------------------------# dropmissing
+d["dropmissing"] = "drop rows that contain missing values"
+b["Missing"]["dropmissing"] = @benchmarkable dropmissing($t)
+b["DataValue"]["dropmissing"] = @benchmarkable dropmissing($t2)
 
-b["filter (Missing)"] = @benchmarkable filter(i -> (i.Month == 1) && (i.DayofMonth == 1), $t)
-b["filter (DataValue)"] = @benchmarkable filter(i -> (i.Month == 1) && (i.DayofMonth == 1), $t2)
+#-----------------------------------------------------------------------# filter
+d["filter"] = "filter on columns that contain missing values"
+b["Missing"]["filter"] = @benchmarkable filter(i -> (i.Month == 1) && (i.DayofMonth == 1), $t)
+b["DataValue"]["filter"] = @benchmarkable filter(i -> (i.Month == 1) && (i.DayofMonth == 1), $t2)
 
-b["select (Missing)"] = @benchmarkable select($t, (:DepTime, :ArrTime, :FlightNum))
-b["select (DataValue)"] = @benchmarkable select($t2, (:DepTime, :ArrTime, :FlightNum))
+#-----------------------------------------------------------------------# select
+b["Missing"]["select"] = @benchmarkable select($t, (:DepTime, :ArrTime, :FlightNum))
+b["DataValue"]["select"] = @benchmarkable select($t2, (:DepTime, :ArrTime, :FlightNum))
 
-b["select regex (Missing)"] = @benchmarkable select($t, All(Between(:Year, :DayofMonth), r"Taxi|Delay"))
-b["select regex (DataValue)"] = @benchmarkable select($t2, All(Between(:Year, :DayofMonth), r"Taxi|Delay"))
+b["Missing"]["select regex"] = @benchmarkable select($t, All(Between(:Year, :DayofMonth), r"Taxi|Delay"))
+b["DataValue"]["select regex"] = @benchmarkable select($t2, All(Between(:Year, :DayofMonth), r"Taxi|Delay"))
 
-b["sort (Missing)"] = @benchmarkable sort($t, :DepDelay, select = (:UniqueCarrier, :DepDelay))
-b["sort (DataValue)"] = @benchmarkable sort($t, :DepDelay, select = (:UniqueCarrier, :DepDelay))
+b["Missing"]["sort"] = @benchmarkable sort($t, :DepDelay, select = (:UniqueCarrier, :DepDelay))
+b["DataValue"]["sort"] = @benchmarkable sort($t, :DepDelay, select = (:UniqueCarrier, :DepDelay))
 
-b["map (Missing)"] = @benchmarkable map(i -> i.DepDelay * 2, $t)
-b["map (DataValue)"] = @benchmarkable map(i -> i.DepDelay * 2, $t2)
+#-----------------------------------------------------------------------# map
+b["Missing"]["map"] = @benchmarkable map(i -> i.DepDelay * 2, $t)
+b["DataValue"]["map"] = @benchmarkable map(i -> i.DepDelay * 2, $t2)
 
 f = i -> (DepDelay2 = 2 * i.DepDelay, AirTime2 = 2 * i.AirTime)
-b["map namedtuple (Missing)"] = @benchmarkable map(f, $t)
-b["map namedtuple (DataValue"] = @benchmarkable map(f, $t2)
+b["Missing"]["map namedtuple"] = @benchmarkable map(f, $t)
+b["DataValue"]["map namedtuple"] = @benchmarkable map(f, $t2)
 
-b["groupby (Missing)"] = @benchmarkable groupby(mean ∘ skipmissing, $t, :Dest, select = :ArrDelay)
-b["groupby (DataValue)"] = @benchmarkable groupby(mean ∘ dropna, $t2, :Dest, select = :ArrDelay)
+#-----------------------------------------------------------------------# groupby
+b["Missing"]["groupby"] = @benchmarkable groupby(mean ∘ skipmissing, $t, :Dest, select = :ArrDelay)
+b["DataValue"]["groupby"] = @benchmarkable groupby(mean ∘ dropna, $t2, :Dest, select = :ArrDelay)
 
+#-----------------------------------------------------------------------# groupreduce
+d["groupreduce"] = "calculate FTSeries(Mean()), filtering out missing values"
 o1 = FTSeries(Mean(); filter = !ismissing)
 o2 = FTSeries(DataValue, Mean(); filter = !isna, transform=get)
-b["groupreduce (Missing)"] = @benchmarkable groupreduce($(copy(o1)), $t, :Dest, select = :ArrDelay)
-b["groupreduce (DataValue"] = @benchmarkable groupreduce($(copy(o2)), $t2, :Dest, select = :ArrDelay)
+b["Missing"]["groupreduce"] = @benchmarkable groupreduce($(copy(o1)), $t, :Dest, select = :ArrDelay)
+b["DataValue"]["groupreduce"] = @benchmarkable groupreduce($(copy(o2)), $t2, :Dest, select = :ArrDelay)
+
 
 tune!(b, verbose=true)
-
 results = run(b, verbose=true)
+
+table_results(results, d)
