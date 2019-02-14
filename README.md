@@ -32,7 +32,7 @@
     "Pandas"   "load (date)"         TrialEstimate(27.219 s)    "load data, parse date field as date type"
     "Pandas"   "load (string)"       TrialEstimate(19.921 s)    "load data, parse date field as string type"
 
-## simulated.jl
+## `simulated.jl`
 
 ### Distributed vs. Non-distributed
 
